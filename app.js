@@ -1,16 +1,24 @@
 const express = require("express");
-const redis = require("redis");
+const { createClient } = require("redis"); // Redis-in düzgün importu
 const axios = require("axios");
 const cors = require("cors");
-const app = express();
 require("dotenv").config();
 
+const app = express();
 app.use(cors());
 app.use(express.json());
-const client = redis.createClient();
+
+const client = createClient({
+  url: process.env.REDIS_URL,
+});
 
 (async () => {
-  await client.connect(); // Redis müştərisini işə salırıq ki, sorğulara cavab verə bilsin.
+  try {
+    await client.connect();
+    console.log("✅ Redis-ə uğurla qoşuldu!");
+  } catch (error) {
+    console.error("❌ Redis bağlantı xətası:", error);
+  }
 })();
 
 app.get("/todolist", async (req, res) => {
@@ -27,21 +35,18 @@ app.get("/todolist", async (req, res) => {
     );
     await client.setEx(key, 3600, JSON.stringify(response.data));
 
-    // Yalnız doğru formatda olan məlumatları göndəririk (əgər massivdirsə)
-    if (Array.isArray(response.data)) {
-      res.json({ source: "api", data: response.data });
-    } else {
-      // Məlumat obyekt formatında gəldikdə
-      res.json({ source: "api", data: [response.data] });
-    }
+    res.json({ source: "api", data: response.data });
   } catch (error) {
     res.status(500).json({ error: "Xəta baş verdi", details: error.message });
   }
 });
-// Serveri bağlayanda Redis-i də bağla
+
+// Server bağlananda Redis-i də bağlayırıq
 process.on("SIGINT", async () => {
-  await client.quit(); // Əsas Redis müştərisini bağlayırıq.
-  process.exit(); // Prosesdən çıxırıq.
+  await client.quit();
+  console.log("🔴 Redis bağlantısı bağlandı");
+  process.exit();
 });
 
-app.listen(process.env.PORT, () => console.log("Server çalışır")); // Serveri 3000 portunda işə salırıq.
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Server ${PORT} portunda çalışır!`));
